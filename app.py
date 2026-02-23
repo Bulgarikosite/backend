@@ -1,77 +1,67 @@
-# app.py
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-import csv
 import os
+import threading
+import time
+import requests
+from urllib.parse import urljoin
+from bs4 import BeautifulSoup
+from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
+import nltk
 
-app = FastAPI(title="Bulgariko Search API")
+from flask import Flask, jsonify
 
-# Разрешаваме CORS за всички домейни (можеш да ограничиш по-късно)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ------------------- NLTK setup -------------------
+nltk.download("stopwords")
+nltk.download("punkt")
 
-# Пътища към CSV файловете
-INDEX_FILE = "search/complete_examples/advanced_pagerank_inverted_index.csv"
-PAGERANK_FILE = "search/complete_examples/advanced_pagerank.csv"
+# ------------------- Crawler -------------------
+START_URLS = [
+    "https://www.wikipedia.org/wiki/Google",
+    "https://news.ycombinator.com/"
+]
 
-inverted_index = {}
-pagerank_scores = {}
+CRAWLED_DATA = []
 
-# Ако CSV файловете ги няма, пускаме crawler + indexing
-if not os.path.exists(INDEX_FILE) or not os.path.exists(PAGERANK_FILE):
-    print("CSV files missing. Running crawler + indexing...")
-    from search.complete_examples.advanced_pagerank import main as crawl_main
-    crawl_main()
-    print("Crawler finished.")
+def crawl_url(url):
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code != 200:
+            return None
+        soup = BeautifulSoup(response.text, "html.parser")
+        text = soup.get_text()
+        # simple tokenization
+        words = word_tokenize(text)
+        filtered_words = [w.lower() for w in words if w.isalpha() and w.lower() not in stopwords.words("english")]
+        return filtered_words
+    except Exception as e:
+        print(f"Failed to crawl {url}: {e}")
+        return None
 
-# Функция за зареждане на CSV файловете
-def load_index():
-    global inverted_index, pagerank_scores
-    if os.path.exists(INDEX_FILE):
-        with open(INDEX_FILE, newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                if len(row) >= 2:
-                    term = row[0]
-                    docs = row[1].split('|')
-                    inverted_index[term] = docs
-    else:
-        print(f"WARNING: {INDEX_FILE} not found!")
+def run_crawler():
+    print("Crawler started...")
+    for url in START_URLS:
+        print(f"Crawling {url}")
+        data = crawl_url(url)
+        if data:
+            CRAWLED_DATA.append({"url": url, "words": data})
+        time.sleep(1)  # avoid spamming servers
+    print("Crawler finished!")
 
-    if os.path.exists(PAGERANK_FILE):
-        with open(PAGERANK_FILE, newline='', encoding='utf-8') as csvfile:
-            reader = csv.reader(csvfile)
-            for row in reader:
-                if len(row) >= 2:
-                    pagerank_scores[row[0]] = float(row[1])
-    else:
-        print(f"WARNING: {PAGERANK_FILE} not found!")
+# ------------------- Flask server -------------------
+app = Flask(__name__)
 
-load_index()
+@app.route("/")
+def home():
+    return "Crawler is running!"
 
-# Функция за търсене
-def search(query: str):
-    query = query.lower().split()
-    results = {}
-    for term in query:
-        if term in inverted_index:
-            for doc in inverted_index[term]:
-                results[doc] = pagerank_scores.get(doc, 0)
-    sorted_results = sorted(results.items(), key=lambda x: x[1], reverse=True)
-    return [doc for doc, score in sorted_results]
+@app.route("/data")
+def data():
+    return jsonify(CRAWLED_DATA)
 
-# API endpoint
-@app.get("/search")
-def search_api(q: str = Query(..., description="Your search query")):
-    results = search(q)
-    return {"query": q, "results": results[:10]}
-
-# Стартиране на сървъра
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    # run crawler in a background thread
+    threading.Thread(target=run_crawler).start()
+    
+    # use Railway port or default 8080
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
