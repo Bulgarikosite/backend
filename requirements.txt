@@ -1,3 +1,5 @@
+fastapi
+uvicorn
 bs4
 requests
 nltk
