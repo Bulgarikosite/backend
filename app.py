@@ -2,17 +2,21 @@ import os
 import threading
 import time
 import requests
-from urllib.parse import urljoin
 from bs4 import BeautifulSoup
+from flask import Flask, jsonify
+import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import nltk
-
-from flask import Flask, jsonify
 
 # ------------------- NLTK setup -------------------
-nltk.download("stopwords")
-nltk.download("punkt")
+nltk_data_path = os.path.join(os.path.dirname(__file__), "nltk_data")
+nltk.data.path.append(nltk_data_path)
+
+try:
+    stopwords.words("english")
+except LookupError:
+    nltk.download("stopwords", download_dir=nltk_data_path)
+    nltk.download("punkt", download_dir=nltk_data_path)
 
 # ------------------- Crawler -------------------
 START_URLS = [
@@ -29,7 +33,6 @@ def crawl_url(url):
             return None
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text()
-        # simple tokenization
         words = word_tokenize(text)
         filtered_words = [w.lower() for w in words if w.isalpha() and w.lower() not in stopwords.words("english")]
         return filtered_words
@@ -38,16 +41,18 @@ def crawl_url(url):
         return None
 
 def run_crawler():
-    print("Crawler started...")
-    for url in START_URLS:
-        print(f"Crawling {url}")
-        data = crawl_url(url)
-        if data:
-            CRAWLED_DATA.append({"url": url, "words": data})
-        time.sleep(1)  # avoid spamming servers
-    print("Crawler finished!")
+    while True:  # run continuously
+        print("Crawler started...")
+        for url in START_URLS:
+            print(f"Crawling {url}")
+            data = crawl_url(url)
+            if data:
+                CRAWLED_DATA.append({"url": url, "words": data})
+            time.sleep(1)
+        print("Crawler finished, sleeping 5 min...")
+        time.sleep(300)  # wait 5 minutes before next crawl
 
-# ------------------- Flask server -------------------
+# ------------------- Flask -------------------
 app = Flask(__name__)
 
 @app.route("/")
@@ -56,12 +61,14 @@ def home():
 
 @app.route("/data")
 def data():
-    return jsonify(CRAWLED_DATA)
+    try:
+        return jsonify(CRAWLED_DATA)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # run crawler in a background thread
-    threading.Thread(target=run_crawler).start()
-    
-    # use Railway port or default 8080
+    # start crawler in a thread
+    threading.Thread(target=run_crawler, daemon=True).start()
+
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
