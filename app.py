@@ -54,7 +54,7 @@ def run_crawler():
                 CRAWLED_DATA.append({"url": url, "words": data})
             time.sleep(1)
         print("Crawler finished, sleeping 5 min...")
-        time.sleep(300)  # wait 5 minutes before next crawl
+        time.sleep(300)  # 5 минути
 
 # ------------------- Flask App -------------------
 app = Flask(__name__)
@@ -70,11 +70,14 @@ def data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ------------------- Background Thread -------------------
+def start_crawler_thread():
+    thread = threading.Thread(target=run_crawler, daemon=True)
+    thread.start()
+
 # ------------------- Main -------------------
 if __name__ == "__main__":
-    # Start crawler in background thread
-    threading.Thread(target=run_crawler, daemon=True).start()
-
-    # Start Flask server
+    # На Railway / Heroku не трябва да се използва app.run() с Gunicorn
+    start_crawler_thread()
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
