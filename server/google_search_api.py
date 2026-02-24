@@ -105,8 +105,8 @@ def search(query, inverted_index, document_info, num_results=10, page=1):
 # If you are using a different file, replace the path with the path to your file
 #If you're using a database, replace this with the code to connect to your database
 try:
-    inverted_index = load_inverted_index('../search/complete_examples/advanced_pagerank_inverted_index.csv')
-    document_info = load_document_info('../search/complete_examples/advanced_pagerank.csv')
+inverted_index = load_inverted_index("advanced_pagerank_inverted_index.csv")
+document_info = load_document_info("advanced_pagerank.csv")
 except FileNotFoundError:
     try:
         inverted_index = load_inverted_index("../advanced_pagerank_inverted_index.csv")
@@ -133,4 +133,5 @@ def search_api():
     })
 
 if __name__ == '__main__':
+
     app.run(debug=True)
