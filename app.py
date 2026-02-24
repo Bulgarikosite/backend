@@ -30,18 +30,22 @@ def crawl_url(url):
     try:
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
+            print(f"Failed to fetch {url}: Status {response.status_code}")
             return None
         soup = BeautifulSoup(response.text, "html.parser")
         text = soup.get_text()
         words = word_tokenize(text)
-        filtered_words = [w.lower() for w in words if w.isalpha() and w.lower() not in stopwords.words("english")]
+        filtered_words = [
+            w.lower() for w in words
+            if w.isalpha() and w.lower() not in stopwords.words("english")
+        ]
         return filtered_words
     except Exception as e:
         print(f"Failed to crawl {url}: {e}")
         return None
 
 def run_crawler():
-    while True:  # run continuously
+    while True:
         print("Crawler started...")
         for url in START_URLS:
             print(f"Crawling {url}")
@@ -52,7 +56,7 @@ def run_crawler():
         print("Crawler finished, sleeping 5 min...")
         time.sleep(300)  # wait 5 minutes before next crawl
 
-# ------------------- Flask -------------------
+# ------------------- Flask App -------------------
 app = Flask(__name__)
 
 @app.route("/")
@@ -66,9 +70,11 @@ def data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ------------------- Main -------------------
 if __name__ == "__main__":
-    # start crawler in a thread
+    # Start crawler in background thread
     threading.Thread(target=run_crawler, daemon=True).start()
 
+    # Start Flask server
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
